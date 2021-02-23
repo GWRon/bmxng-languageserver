@@ -452,7 +452,13 @@ Type TJSONHelper
 			EndIf
 		Next
 	End Function
+
 	
+	Method SetPathNull:TJSON(path:String, json:TJSON = Null)
+		If Not json Then json = defaultJSON
+		Return _SetJSONElement(path, New TJSONNull, json)
+	End Method
+
 
 	Method SetPathString:TJSON(path:String, value:String, json:TJSON = Null)
 		If Not json Then json = defaultJSON
