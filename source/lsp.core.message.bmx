@@ -9,6 +9,7 @@ Type TLSPMessage
 	Field methodName:String
 	Field methodNameLower:String
 	Field _cancelled:Int = False
+	Field _customJSON:String
 	
 	'Field _data:TData
 	Field _jsonHelper:TJSONHelper
@@ -64,6 +65,22 @@ Type TLSPMessage
 		jsonHelper.SetPathString("result/error/message", errorMessage)
 		
 		Return new TLSPMessage(jsonHelper)
+	End Function
+
+
+	'@messageID     message id of the request
+	Function CreateNullResultMessage:TLSPMessage(messageID:int)
+		'for now this manual code ensures that "result:null" is actually appended
+		Local jsonHelper:TJSONHelper = New TJSONHelper("{~qjsonrpc~q:~q2.0~q, ~qid~q:" + messageID + ",~qresult~q: null}")
+		Return new TLSPMessage(jsonHelper)
+rem
+		Local jsonHelper:TJSONHelper = New TJSONHelper("")
+		jsonHelper.SetPathString("jsonrpc", "2.0")
+		jsonHelper.SetPathInteger("id", messageID)
+		jsonHelper.SetPathNull("result")
+		
+		Return new TLSPMessage(jsonHelper)
+endrem
 	End Function
 
 
@@ -132,4 +149,12 @@ Type TLSPMessage
 		
 		Return False
 	End Method
+
+
+	Method ToString:String()
+		If _customJSON Then Return _customJSON
+		If _jsonHelper Then Return _jsonHelper.ToStringCompact()
+		Return ""
+	End Method
+
 End Type

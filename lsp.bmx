@@ -38,6 +38,10 @@ Import Brl.Textstream
 '------------
 Global App:TApp = TApp.GetInstance()
 
+'write to log.lsp.txt
+Debugger.logFileEnabled = True
+Debugger.logFileURI = "log.lsp.txt"
+
 'ADD HANDLERS
 'add all the method handlers we want to be usable
 AppData.AddMethodHandler( new TLSPMethodHandler_TextDocument )
@@ -65,6 +69,8 @@ MessageCollection.RegisterSequentialMethod("textDocument/rename")
 'start lsp and wait for incoming commands
 App.Run()
 
+'return 0 for OK or 1 for error
+Return AppData.exitCode
 
 
 
@@ -129,6 +135,14 @@ Type TApp
 
 			'parse the message
 			Local message:TLSPMessage = New TLSPMessage(incomingContent)
+
+
+			'once "shutdown" was requested, all other requests become invalid
+			If AppData.receivedShutdownRequest and message.IsRequest()
+				MessageCollection.AddOutgoingMessage( TLSPMessage.CreateErrorMessage(message.id, TClientCommunicator.ERROR_InvalidRequest, "Already received ~qshutdown request~q.") )
+				'skip processing this message
+				Continue
+			EndIf
 
 
 			'without "initialize":
@@ -202,7 +216,15 @@ Type TApp
 				ElseIf message.IsRequest()
 					If message.IsMethod("shutdown")
 						AddLog("## SHUTDOWN~n")
-						AppData.exitApp = True
+						'inform client that we got the request
+						'if somethingNotCorrect
+						'	MessageCollection.AddOutgoingMessage( TLSPMessage.CreateErrorMessage(message.id, ERROR_UnknownErrorCode, "the error message") )
+						'else
+							MessageCollection.AddOutgoingMessage( TLSPMessage.CreateNullResultMessage(message.id) )
+						'endif
+						AppData.receivedShutdownRequest = True
+						AppData.exitCode = 0 'received shutdown now
+						'AppData.exitApp = True
 						'wait for next message
 						Continue
 					EndIf
@@ -233,7 +255,7 @@ Type TApp
 			While MessageCollection.GetOutgoingMessageCount() > 0
 				Local message:TLSPMessage = MessageCollection.PopOutgoingMessage()
 				
-				ClientCommunicator.Send( message._jsonHelper.ToStringCompact() )
+				ClientCommunicator.Send( message.ToString() )
 			Wend
 			
 			Delay(25)
@@ -323,7 +345,9 @@ Type TApp
 		workerThreadsPool.shutdown()
 
 		AddLog("## Bye.~n")
-		End
+		'do NOT "end" here - we need to return the application result via
+		'"return code" from "main"
+		'End
 	End Method
 End Type
 

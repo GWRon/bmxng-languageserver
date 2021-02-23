@@ -10,6 +10,8 @@ Type TLSPAppData
 	'other incoming messages are almost ignored until "initialize"
 	'was received
 	Field receivedInitializePacket:Int = False
+	'once received, all further incoming are replied with "invalid"
+	Field receivedShutdownRequest:Int = False
 	'registered "method" handlers
 	Field methodHandlers:TStringMap = new TStringMap
 	
@@ -18,6 +20,7 @@ Type TLSPAppData
 	Field defaultMethodOrderHandling:Int = 1
 	'set to true to exit all threads and finish "Run()"
 	Field exitApp:Int = False
+	Field exitCode:Int = 1 '1 = not received "shutdown" yet
 
 
 	Method HasMethodHandler:Int(methodName:String)
