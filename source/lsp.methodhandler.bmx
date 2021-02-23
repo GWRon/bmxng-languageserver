@@ -15,6 +15,14 @@ Type TLSPMethodHandler
 		Next
 	End Method
 
+
+	Function CreateBasicReplyJSONHelper:TJSONHelper(messageID:Int)
+		local helper:TJSONHelper = new TJSONHelper("")
+		helper.SetPathString("jsonrpc", "2.0")
+		helper.SetPathInteger("id", messageID)
+		
+		Return helper
+	End Function
 	
 	'method actually processing a message
 	Method HandleMessage:Int(message:TLSPMessage) abstract

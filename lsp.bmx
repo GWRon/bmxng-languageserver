@@ -41,6 +41,7 @@ Global App:TApp = TApp.GetInstance()
 'ADD HANDLERS
 'add all the method handlers we want to be usable
 AppData.AddMethodHandler( new TLSPMethodHandler_TextDocument )
+AppData.AddMethodHandler( new TLSPMethodHandler_TextDocument_Completion )
 'assume unknown methods are to handle "in order" / as sequence
 AppData.defaultMethodOrderHandling = 1
 
@@ -142,7 +143,7 @@ Type TApp
 						MessageCollection.AddOutgoingMessage( App.CreateInitializeResultMessage() )
 						'wait for next message
 						Continue
-
+	
 					Else
 						MessageCollection.AddOutgoingMessage( TLSPMessage.CreateErrorMessage(message.id, TClientCommunicator.ERROR_ServerNotInitialized, "Not initialized yet") )
 						'wait for next message
@@ -198,8 +199,14 @@ Type TApp
 						Continue
 
 					EndIf
+				ElseIf message.IsRequest()
+					If message.IsMethod("shutdown")
+						AddLog("## SHUTDOWN~n")
+						AppData.exitApp = True
+						'wait for next message
+						Continue
+					EndIf
 				EndIf
-				
 			EndIf
 			
 

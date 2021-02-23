@@ -65,6 +65,14 @@ Type TLSPMessage
 		
 		Return new TLSPMessage(jsonHelper)
 	End Function
+
+
+	Function CreateRPCMessage:TLSPMessage(messageID:int, jsonHelper:TJSONHelper)
+		jsonHelper.SetPathString("jsonrpc", "2.0")
+		jsonHelper.SetPathInteger("id", messageID)
+		
+		Return new TLSPMessage(jsonHelper)
+	End Function
 	
 	
 	Method GetPathString:String(path:String)
