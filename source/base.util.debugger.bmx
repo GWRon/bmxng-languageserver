@@ -36,9 +36,11 @@ Type TDebugger
 	Field _font:TGuiFont
 	Field ShowSend:Byte = True
 	Field ShowReceive:Byte = True
+	Field logFile:TStream
+	Field logFileEnabled:Int = False
+	Field logFileURI:String = "log.lsp.txt"
 	
 	Method New()
-		
 		Self._logStack = CreateList()
 		Self._messageStack = CreateList()
 		Self._mutex = CreateMutex()
@@ -49,6 +51,12 @@ Type TDebugger
 	Method Log(text:String)
 		LockMutex(Self._mutex)
 		Self._logStack.AddLast(text)
+		'write to a log file?
+		'do file creation here to allow delayed logFileEnabled adjustments
+		If logFileEnabled 
+			If Not logFile Then logFile = WriteStream(logFileURI)
+			If logFile then logFile.WriteString(text)
+		EndIf
 		UnlockMutex(Self._mutex)
 	EndMethod
 
@@ -63,6 +71,7 @@ Type TDebugger
 	EndMethod
 	
 	Method Free()
+		if logFile then logFile.Close() 
 		
 		Self._isTerminated = True
 	EndMethod
