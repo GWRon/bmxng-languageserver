@@ -6,7 +6,18 @@ Import Brl.Vector
 Import "base.bmxparser.toker.bmx"
 Import "base.util.longmap.bmx"
 
-rem
+'Maybe we need a "sourceInformation.unresolvedNodes" which
+'is iterated once parsing is done - ans so GetType can be done
+'OR ... all nodes get a "onParseFinish()" method which is
+'executed on all tree elements after parsing ("step 2")
+'this way eg "param"-nodes can use a "classNode" which is defined
+'later in the code
+'Alternatively all "Getters" need to be "lazy loaders" so stuff is fetched
+'afterwards
+
+
+
+Rem
 Global pInfo:TBMXParserInformation = new TBMXParserInformation
 pInfo.TryAutoConfig()
 
@@ -36,7 +47,7 @@ Type TBMXParserInformation
 	'elementNodeIDs -> TObjectList of TBMXNodes
 	Field elements:TLongMap = New TLongMap
 	'sourceID -> TBMXSourceInformation
-	Field sources:TLongMap = new TLongMap
+	Field sources:TLongMap = New TLongMap
 	
 	
 	Method TryAutoConfig:Int()
@@ -64,12 +75,12 @@ Type TBMXParserInformation
 
 	
 	Method AddElement(element:TBMXNode)
-		local ol:TObjectList = TObjectList(elements.ValueForKey(element.GetID()))
-		if not ol
-			ol = new TObjectList
+		Local ol:TObjectList = TObjectList(elements.ValueForKey(element.GetID()))
+		If Not ol
+			ol = New TObjectList
 			elements.Insert(element.GetID(), ol)
-		endif
-		If not ol.contains(element)
+		EndIf
+		If Not ol.contains(element)
 			ol.AddLast(element)
 		EndIf
 	End Method
@@ -77,8 +88,8 @@ Type TBMXParserInformation
 
 	'return first element for the given ID (there migh be multiple "local x:Int")
 	Method GetElement:TBMXNode(elementID:Long)
-		local ol:TObjectList = TObjectList(elements.ValueForKey(elementID))
-		if not ol then Return Null
+		Local ol:TObjectList = TObjectList(elements.ValueForKey(elementID))
+		If Not ol Then Return Null
 		Return TBMXNode(ol.First())
 	End Method
 
@@ -89,6 +100,19 @@ Type TBMXParserInformation
 	End Method
 End Type
 
+
+
+Struct SBMXSourceContentBlock
+	Field value:String
+	Field startPos:Int
+	Field endPos:Int
+
+	Method New(value:String, startPos:Int, endPos:Int)
+		Self.value = value
+		Self.startPos = startPos
+		Self.endPos = endPos
+	End Method
+End Struct
 
 
 
@@ -105,6 +129,7 @@ Type TBMXSourceInformation
 	'sourcePosition at which lines start
 	Field _linesStartPos:Int[]
 	Field _lineCount:Int
+	Field _length:Int
 	Field _imports:TLongMap = New TLongMap
 	Field _types:TLongMap = New TLongMap
 	Field _interfaces:TLongMap = New TLongMap
@@ -121,22 +146,22 @@ Type TBMXSourceInformation
 	Field _nodesByPos:TIntMap = New TIntMap
 	
 	
-	private
+	Private
 	Method New()
 	End Method
 
-	public
+	Public
 	
 	Method New(uri:String)
-		self.uri = uri
+		Self.uri = uri
 	End Method
 
 
 	Method GetID:Long()
-		if id = 0
-			if not uri then Throw "TBMXSourceInformation: Cannot generate ID without uri"
+		If id = 0
+			If Not uri Then Throw "TBMXSourceInformation: Cannot generate ID without uri"
 			id = uri.ToLower().Hash()
-		endif
+		EndIf
 		Return id
 	End Method
 	
@@ -170,6 +195,8 @@ Type TBMXSourceInformation
 					_globals.Insert(node.GetID(), node)
 				Case TBMXPropertyNode.PROPERTYTYPE_LOCAL
 					_locals.Insert(node.GetID(), node)
+				Case TBMXPropertyNode.PROPERTYTYPE_PARAM
+					'Nothing to do
 			End Select
 		
 		EndIf
@@ -180,50 +207,98 @@ Type TBMXSourceInformation
 	End Method
 
 
-	Method GetPreviousNode:TBMXNode(line:Int, linePos:Int, posMap:TIntMap = Null)
-		if line < 0 or line >= _linesStartPos.length Then return Null
-		Return GetPreviousNode(_linesStartPos[line-1] + linePos)
-	End Method
-
-	Method GetPreviousNode:TBMXNode(sourcePos:Int, posMap:TIntMap = Null)
-		if sourcePos = 0 then return Null
-		If not posMap then posMap = _nodesByPos
-
-		Local result:TBMXNode
-		Local currentPos:Int = sourcePos - 1
-
-		Repeat
-			result = TBMXNode(posMap.ValueForKey(currentPos))
-			if not result then currentPos :- 1
-		Until result or currentPos < 0
-
-		'ends later?
-		if result and result._end.pos >= sourcePos Then result = Null
-
-		return result
-	End Method
-
-
-	Method GetNode:TBMXNode(line:Int, linePos:Int)
-		if line < 0 or line >= _linesStartPos.length Then return Null
-		Return GetNode(_linesStartPos[line-1] + linePos)
+	Method GetNode:TBMXNode(line:Int, linePos:Int, posMap:TIntMap = Null)
+		Return GetNode(GetPosition(line, linePos), posMap)
 	End Method
 	
 	
-	Method GetNode:TBMXNode(sourcePos:Int)
+	Method GetNode:TBMXNode(sourcePos:Int, posMap:TIntMap = Null)
 		Local result:TBMXNode
 		Local currentPos:Int = sourcePos
+		If Not posMap Then posMap = _nodesByPos
 		Repeat
-			result = TBMXNode(_nodesByPos.ValueForKey(currentPos))
-'if result then print "sourcePos="+sourcePos+"  currentPos="+currentPos + "  node=" + result.ToString() '_parseProperty startPos=16490 (601:8 - 601:67)
-			if not result then currentPos :- 1
-		Until result or currentPos < 0
+			result = TBMXNode(posMap.ValueForKey(currentPos))
+			If Not result Then currentPos :- 1
+		Until result Or currentPos < 0
 		
 		'check if the "first found" node already ended before the
 		'requested position!
-		if result and result._end.pos < sourcePos Then result = Null
+		If result And result._end.pos < sourcePos 
+			If result._parent
+				Local parent:TBMXNode = result._parent
+				Repeat
+					if parent._end.pos > sourcePos then return parent 
+					parent = parent._parent
+				Until Not parent
+			EndIf
+			result = Null
+		EndIf
 		
-		return result
+		Return result
+	End Method
+
+
+	Method GetNode:TBMXNode(name:String, usedAtPos:Int, usedInNode:TBMXNode = Null)
+		Local result:TBMXNode
+		
+		If Not usedInNode Then usedInNode = GetNode(usedAtPos)
+		'defined in other module?
+		If Not usedInNode
+			Print "TODO: defined in another module?"
+			Return Null
+		EndIf
+
+		'check self and then parents (types, global scope ...)
+		Local checkedNode:TBMXNode = usedInNode
+		Repeat
+Rem
+if name.ToLower() = "info" 
+
+	If TBMXClassNode(checkedNode) 
+		print "  checked class: " + checkedNode.ToString()
+		For local n:TBMXNode = EachIn TBMXClassNode(checkedNode)._children
+			print "  child: " + n.name
+		Next
+		print "  has child:  "+checkedNode.HasChild(name)
+	elseif TBMXCallableNode(checkedNode) 
+		print "  checked callable: " + checkedNode.ToString()
+		For local n:TBMXNode = EachIn TBMXCallableNode(checkedNode)._params
+			print "  param: " + n.name
+		Next
+		print "  has param:  "+TBMXCallableNode(checkedNode).HasParam(name)
+	else
+		print "  checked node: " + checkedNode.ToString()
+	EndIf
+Endif
+endrem
+			'defined inside this node?
+			result = checkedNode.GetChild(name)
+			If result Then Return result
+
+			'defined as param this node?
+			'(a local definition has higher priority than a function param)
+			If TBMXCallableNode(checkedNode)
+				result = TBMXCallableNode(checkedNode).GetParam(name)
+				If result Then Return result
+			EndIf
+
+			'if not global and not import/module ... it is unknown 
+			If checkedNode = rootNode Then Return Null
+
+			'not possible if current is a "type/function in a function" - different scopes?
+			If checkedNode <> usedInNode And TBMXCallableNode(usedInNode) And TBMXCallableNode(checkedNode) Then Return Null
+
+			checkedNode = checkedNode._parent
+		Until Not checkedNode
+		
+		Return Null
+	End Method	
+
+	
+	Method GetPosition:Int(line:Int, linePos:Int)
+		If line < 0 Then line = 0
+		If line >= _linesStartPos.length Then line = _linesStartPos.length - 1
+		Return Min(_length, _linesStartPos[line-1] + linePos)
 	End Method
 
 	
@@ -246,9 +321,9 @@ Struct SSourcePosition
 	Field linePos:Int
 	
 	Method New(pos:Int, line:Int, linePos:Int)
-		self.pos = pos
-		self.line = line
-		self.linePos = linePos
+		Self.pos = pos
+		Self.line = line
+		Self.linePos = linePos
 	End Method
 End Struct
 
@@ -269,45 +344,93 @@ Global parseImports:Int = False
 
 	
 	Method Parse(content:String, workingDirectory:String = "", info:TBMXParserInformation, useRootNode:TBMXSourceNode=Null)
-		if not info Then Throw "You need to pass a parser information container to the parser."
-		if not info.processedImports then info.processedImports = new TStringMap
+		If Not info Then Throw "You need to pass a parser information container to the parser."
+		If Not info.processedImports Then info.processedImports = New TStringMap
 
-		sourceInformation = new TBMXSourceInformation
+		sourceInformation = New TBMXSourceInformation
 
-		if useRootNode
+		If useRootNode
 			sourceInformation.rootNode = useRootNode
-		else
+		Else
 			sourceInformation.rootNode = New TBMXSourceNode.Init( TBMXSourceNode.SOURCETYPE_RAW, "", workingDirectory )
-		endif
+		EndIf
 	
 	
 		Local isExtern:Int = False
-print "pushing"
 		nodeTree.AddLast(sourceInformation.rootNode)
-print "done"		
 		Local t:TToker = New TToker.Create("", content)
+
+		sourceInformation._length = content.length
 		
 		'read line start positions
-		sourceInformation._linesStartPos = new Int[t._lines.length]
+		sourceInformation._linesStartPos = New Int[t._lines.length]
 		If t._lines.length > 0
-			local newLineLength:Int = "~n".length
-			For local i:int = 1 until t._lines.length
+			Local newLineLength:Int = "~n".length
+			For Local i:Int = 1 Until t._lines.length
 				sourceInformation._linesStartPos[i] = sourceInformation._linesStartPos[i-1] + t._lines[i-1].length + newLineLength
 			Next
-		Endif
+		EndIf
 
+
+		Local openedSelect:Int = 0
+		Local openedSelectCase:Int = 0
 		
 		Repeat
 			t.NextToke()
 			If t._tokeType = TOKE_KEYWORD 
 				Select t._tokeLower
+					Case "select"
+						Local node:TBMXLogicNode = New TBMXLogicNode
+						node.SetName(t._tokeLower)
+						node.SetStart(t._tokePos, t._line, t._linePos)
+
+						sourceInformation.AddNode(node)
+						info.AddElement(node)
+
+						node._parent = TBMXNode(nodeTree.Last())
+						If node._parent Then node._parent.AddChild(node)
+						nodeTree.AddLast(node)
+
+					Case "case", "default"
+						'close case/default nodes
+						local lastNode:TBMXNode	= TBMXNode(nodeTree.Last())
+						if lastNode and (lastNode.name = "case" or lastNode.name = "default") 
+							Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+							If node Then node.SetEnd(t)
+						endif
+						
+						'start new
+						Local node:TBMXLogicNode = New TBMXLogicNode
+						node.SetName(t._tokeLower)
+						node.SetStart(t._tokePos, t._line, t._linePos)
+
+						sourceInformation.AddNode(node)
+						info.AddElement(node)
+
+						node._parent = TBMXNode(nodeTree.Last())
+						If node._parent Then node._parent.AddChild(node)
+						nodeTree.AddLast(node)
+
+					Case "endselect"
+						'close case/default nodes
+						local lastNode:TBMXNode	= TBMXNode(nodeTree.Last())
+						if lastNode and (lastNode.name = "case" or lastNode.name = "default") 
+							Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+							If node Then node.SetEnd(t)
+						endif
+						
+						'close self
+						Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+						If node Then node.SetEnd(t)
+
 					Case "for", "repeat", "while"  ', "if", "else", "elseif"
+
 						'for "if": bcc -> parser.bmx -> ParseIfStmt()
 						'or... have some "ParseExpr()" - so "if 1=1 n=1" is identified
 						'as singlelineif with "1=1" being the condition and "n=1" the action
 						
-						Local node:TBMXLogicNode = new TBMXLogicNode
-						node.name = t._tokeLower
+						Local node:TBMXLogicNode = New TBMXLogicNode
+						node.SetName(t._tokeLower)
 						node.SetStart(t._tokePos, t._line, t._linePos)
 
 						sourceInformation.AddNode(node)
@@ -319,15 +442,15 @@ print "done"
 					
 
 					Case "next", "until", "wend" ', "endif"
-						local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
-						if node then node.SetEnd(t)
+						Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+						If node Then node.SetEnd(t)
 						
 					Case "extern" 
 						'read until end extern?
 						isExtern = True
 
-						Local node:TBMXLogicNode = new TBMXLogicNode
-						node.name = t._tokeLower
+						Local node:TBMXLogicNode = New TBMXLogicNode
+						node.SetName(t._tokeLower)
 						node.SetStart(t._tokePos, t._line, t._linePos)
 
 						sourceInformation.AddNode(node)
@@ -341,14 +464,14 @@ print "done"
 						'TODO
 						
 					Case "import"
-if not parseImports then continue
+If Not parseImports Then Continue
 						
 						Local node:TBMXSourceNode = TBMXSourceNode(ParseImport(t, workingDirectory, info))
-						If not node Then continue
+						If Not node Then Continue
 
-						if node.sourceType = TBMXSourceNode.SOURCETYPE_IMPORTFILE or node.sourceType = TBMXSourceNode.SOURCETYPE_MODULE
-							if node.uri and not info.processedImports.Contains(node.uri)
-								local importParser:TBMXParser = New TBMXParser
+						If node.sourceType = TBMXSourceNode.SOURCETYPE_IMPORTFILE Or node.sourceType = TBMXSourceNode.SOURCETYPE_MODULE
+							If node.uri And Not info.processedImports.Contains(node.uri)
+								Local importParser:TBMXParser = New TBMXParser
 								'print "loading import " + node.uri
 								info.processedImports.Insert(node.uri, node)
 
@@ -358,8 +481,8 @@ if not parseImports then continue
 								'to avoid an additional root node being added
 								'add to the parent
 								'node.AddChild(importParser.rootNode)
-							endif
-						endif
+							EndIf
+						EndIf
 			
 						sourceInformation.AddNode(node)
 						info.AddElement(node)
@@ -404,7 +527,7 @@ if not parseImports then continue
 
 					Case "function"
 						'ignore externs for now
-						if isExtern then continue
+						If isExtern Then Continue
 						
 						Local node:TBMXNode = ParseCallable(t, TBMXCallableNode.CALLABLETYPE_FUNCTION)
 						If TBMXCallableNode(node)
@@ -433,34 +556,50 @@ if not parseImports then continue
 						EndIf
 
 					Case "endtype", "endinterface", "endstruct", "endfunction", "endmethod"
-						local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
-						if node then node.SetEnd(t)
+						Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+						If node Then node.SetEnd(t)
 
 					Case "endextern"
 						isExtern = False
 
-						local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
-						if node then node.SetEnd(t)
+						Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+						If node Then node.SetEnd(t)
 				
 					'check if upcoming is "type/interface/struct..."
 					Case "end"
 						Select PeekNextToke(t, True)
 							Case "extern"
+								NextToke(t)
+
 								isExtern = False
 
-								local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
-								if node then node.SetEnd(t)
+								Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+								If node Then node.SetEnd(t)
+							Case "select"
+								NextToke(t)
+
+								'close case/default nodes
+								local lastNode:TBMXNode	= TBMXNode(nodeTree.Last())
+								if lastNode and (lastNode.name = "case" or lastNode.name = "default") 
+									Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+									If node Then node.SetEnd(t)
+								endif
+								
+								'close self
+								Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+								If node Then node.SetEnd(t)
+								
 							Case "type", "interface", "struct"
 								NextToke(t)
 								
-								local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
-								if node then node.SetEnd(t)
+								Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+								If node Then node.SetEnd(t)
 							Case "function", "method"
 								NextToke(t)
 
-								local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
-								if node then node.SetEnd(t)
-							rem
+								Local node:TBMXNode = TBMXNode(nodeTree.RemoveLast())
+								If node Then node.SetEnd(t)
+							Rem
 							Case "if" 'end if
 								NextToke(t)
 
@@ -518,8 +657,11 @@ if not parseImports then continue
 				End Select
 			EndIf
 		Until t._tokeType = TOKE_EOF
+	
 
-print "left on stack: " + nodeTree.Count()
+		if nodeTree.Count() > 1
+			Print "left on stack (in addition to root/source): " + nodeTree.Count() + "   " + TBMXNode(nodeTree.Last()).ToString()
+		endif
 
 '		Print rootNode.DumpTree()
 	End Method
@@ -535,7 +677,7 @@ print "left on stack: " + nodeTree.Count()
 		Local node:TBMXClassNode = New TBMXClassNode
 		node.classType = classType
 		node.SetStart(t._tokePos, t._line, t._linePos)
-		node.name = t._toke
+		node.SetName(t._toke)
 		If node.name = "" Then Return Null
 
 		t.NextToke()
@@ -616,27 +758,27 @@ endrem
 		'import "file.bmx"
 		If t._tokeType = TOKE_STRINGLIT
 			node.sourceType = TBMXSourceNode.SOURCETYPE_IMPORTFILE
-			node.name = BmxUnquote(t._toke)
+			node.SetName(BmxUnquote(t._toke))
 			node.uri = node.name
 
-			if not node.name.ToLower().EndsWith(".bmx")
+			If Not node.name.ToLower().EndsWith(".bmx")
 				t.nextToke()
 				Return Null
 			EndIf
 
 
-			if workingDirectory Then node.uri = workingDirectory + "/" + node.uri
+			If workingDirectory Then node.uri = workingDirectory + "/" + node.uri
 			node.uri = ActualPath(node.uri) 'correct casing
 			node.uri = RealPath(node.uri) 'absolute path
 
 		'import my.module
 		Else
 			node.sourceType = TBMXSourceNode.SOURCETYPE_MODULE
-			node.name = ParseModulePath(t)
+			node.SetName(ParseModulePath(t))
 
-			local parts:String[] = node.name.ToLower().Split(".")
-			local modPath:String = info.bmxDirectory + "/"
-			For local p:String = EachIn parts
+			Local parts:String[] = node.name.ToLower().Split(".")
+			Local modPath:String = info.bmxDirectory + "/"
+			For Local p:String = EachIn parts
 				modPath :+ p + ".mod/"
 			Next
 			modPath :+ parts[parts.length-1] + ".bmx"
@@ -667,7 +809,7 @@ endrem
 		Repeat t.NextToke()
 			If t._tokeType = TOKE_EOF Then Return Null
 		Until t._tokeType = TOKE_IDENT
-		node.name = t._toke
+		node.SetName(t._toke)
 
 		'find ":" - local i:int  |  local x:int(y) 
 		'or "(" - local f(x:int)
@@ -808,22 +950,21 @@ endrem
 		Local tokePos:Int = t._tokePos
 		Repeat t.NextToke()
 			If t._tokeType = TOKE_EOF Then Exit
-		Until t._tokeType = TOKE_IDENT or (t._tokeType = TOKE_KEYWORD and t._toke.ToLower() = "new") 'Method New()
+		Until t._tokeType = TOKE_IDENT Or (t._tokeType = TOKE_KEYWORD And t._toke.ToLower() = "new") 'Method New()
 'print " -> " + t._toke + "   tokePos="+t._tokePos
 
 		Local node:TBMXCallableNode = New TBMXCallableNode
 		node.callableType = callableType
 		node.SetStart(tokePos, line, linePos)
-		node.name = t._toke
+		node.SetName(t._toke)
 		If node.name = "" Then Return Null
-
 		NextToke(t) 'skip spaces
 
 		If t._toke = ":"
 			node._returns = NextToke(t)
+			NextToke(t)
 		EndIf
 
-		NextToke(t)
 		If t._toke = "("
 			Local args:String
 			Local openBracket:Int = 1
@@ -853,9 +994,41 @@ endrem
 
 			Local argsSplit:String[] = ParseCallableArgs(args)
 			For Local arg:String = EachIn argsSplit
-				node._params :+ [arg]
+				Local argNode:TBMXPropertyNode = New TBMXPropertyNode
+				argNode.propertyType = TBMXPropertyNode.PROPERTYTYPE_PARAM
+				
+				Local splitterPos:Int = arg.Find(":")
+				If splitterPos = -1
+					argNode.SetName(arg)
+					'default to ":int"
+					argNode._typeName = "int"
+				Else
+					argNode.SetName(arg[.. splitterPos])
+					'variants:
+					'myparam:int(p:int) = defaultCallback
+					'myparam(p:int) = defaultCallback
+					'myparam = defaultValue
+					Rem
+					Local argType:String = arg[splitterPos+1 ..]
+					Local argDefaultSplitter:Int = argType.FindLast("=") 
+					if argDefaultSplitter >= 0
+						Local argFuncDefEndPos:Int = argType.FindLast(")")
+						if argFuncDefEndPos > 0 and argFuncDefEndPos < argDefaultSplitter
+							
+						if argType.Find(")") > argDefaultSplitter
+					endrem
+					Local argDefaultSplitter:Int = arg.FindLast("=") 
+					If argDefaultSplitter >= 0 
+						argNode._typeName = arg[splitterPos+1 .. argDefaultSplitter]
+					Else
+						argNode._typeName = arg[splitterPos+1 ..]
+					EndIf
+					
+				EndIf
+			
+				node.AddParam(argNode)
+'print "Callable: " + node.name + ". Added argument: " + argNode.name +"["+argNode._typeName+"]"
 			Next
-
 		EndIf
 
 
@@ -969,7 +1142,7 @@ endrem
 
 
 	Method SkipEols(toker:TToker)
-		While CParse(toker, "~n") or CParse(toker, ";")
+		While CParse(toker, "~n") Or CParse(toker, ";")
 		Wend
 	End Method
 	
@@ -1049,7 +1222,7 @@ endrem
 		EndIf
 	End Method
 
-rem
+Rem
 	Method FindAhead:Int(s:String, start:Int, maxDistance:Int = -1, caseSensitive:Int = False)
 		If start + s.length > content.length Then Return -1
 		
@@ -1077,12 +1250,12 @@ End Type
 
 Type TBMXNode
 	Field name:String
+	Field nameLower:String
 	Field id:Long
 	Field key:Long
 	Field _start:SSourcePosition
 	Field _end:SSourcePosition
 	Field _headerEnd:SSourcePosition
-	Field _children:TObjectList
 	' NG's GC allows cross references and cleans them up properly
 	Field _parent:TBMXNode
 	Field _parentName:String 'lazy loaded class node
@@ -1092,32 +1265,51 @@ Type TBMXNode
 	End Method
 	
 	
+	Method SetName(name:String)
+		Self.name = name
+		Self.nameLower = name.ToLower()
+	End Method
+	
+	
 	Method GetID:Long()
-		if id = 0
-			if not name then Throw "TBMXNode: Cannot generate ID without name"
+		If id = 0
+			If Not name Then Throw "TBMXNode: Cannot generate ID without name"
 			'blitzmax types, variables, ... are not case sensitive!
-			id = (name.ToLower()+_start.pos).Hash()
-		endif
+			id = (nameLower + _start.pos).Hash()
+		EndIf
 		Return id
 	End Method
 
 
 	Method GetKey:Long()
-		if key = 0
-			if not name then Throw "TBMXNode: Cannot generate Key without name"
+		If key = 0
+			If Not name Then Throw "TBMXNode: Cannot generate Key without name"
 			'blitzmax types, variables, ... are not case sensitive!
 			key = name.ToLower().Hash()
-		endif
+		EndIf
 		Return key
 	End Method
 	
 	
-	Method AddChild(node:TBMXNode)
-		If Not _children Then _children = New TObjectList
-		
-		_children.AddLast(node)
+	Method AddChild:Int(node:TBMXNode)
+		Return False
 	End Method
-	
+
+
+	Method GetChild:TBMXNode(name:String)
+		Return Null
+	End Method
+
+
+	Method HasChild:Int(name:String)
+		Return GetChild(name) <> Null
+	End Method
+
+
+	Method HasChild:Int(node:TBMXNode)
+		Return False
+	End Method
+
 
 	Method SetStart(pos:Int, line:Int, linePos:Int)
 		_start = New SSourcePosition(pos, line, linePos)
@@ -1147,10 +1339,51 @@ Type TBMXNode
 	
 	
 	Method ToString:String()
-		Return "Node [line="+_start.line+"]"
+		Return "Node [line="+_start.line+", linePos="+_start.linePos+"]"
 	End Method
 	
 	
+	Method DumpTree:String(level:Int = 0)
+		Return ""
+	End Method
+End Type
+
+
+
+
+Type TBMXBlockNode Extends TBMXNode
+	Field _children:TObjectList
+	
+	
+	Method AddChild:Int(node:TBMXNode) Override
+		If Not _children Then _children = New TObjectList
+		
+		_children.AddLast(node)
+		
+		Return True
+	End Method
+
+
+	Method GetChild:TBMXNode(name:String) Override
+		If Not _children Then Return Null
+		
+		name = name.ToLower()
+		For Local n:TBMXNode = EachIn _children
+			If n.nameLower = name Then Return n
+		Next
+		'TODO: fuzzy search?
+		
+		Return Null
+	End Method
+
+
+	Method HasChild:Int(node:TBMXNode) Override
+		If Not _children Then Return False
+		
+		Return _children.Contains(node)
+	End Method
+
+
 	Method DumpTree:String(level:Int = 0)
 		Local res:String
 		res = RSet("", level*2) + ToString() + "~n"
@@ -1163,13 +1396,21 @@ Type TBMXNode
 		
 		Return res
 	End Method
-		
 End Type
 
 
 
 
-Type TBMXSourceNode Extends TBMXNode
+Type TBMXLogicNode Extends TBMXBlockNode
+	Method ToString:String()
+		Return "logic ~q"+name+"~q [line="+_start.line+"]"
+	End Method
+End Type
+
+
+
+
+Type TBMXSourceNode Extends TBMXBlockNode
 	Field sourceType:Int
 	Field uri:String
 	Field strictLevel:Int = 0
@@ -1182,7 +1423,7 @@ Type TBMXSourceNode Extends TBMXNode
 
 	Method Init:TBMXSourceNode(sourceType:Int, name:String, uri:String)
 		Self.sourceType = sourceType
-		Self.name = name
+		Self.SetName(name)
 		Self.uri = uri
 		Return Self
 	End Method
@@ -1196,14 +1437,7 @@ End Type
 
 
 
-Type TBMXLogicNode Extends TBMXNode
-	Method ToString:String()
-		Return "logic ~q"+name+"~q [line="+_start.line+"]"
-	End Method
-End Type	
-
-
-Type TBMXClassNode Extends TBMXNode
+Type TBMXClassNode Extends TBMXBlockNode
 	Field classType:Int
 	Field _abstract:Int = False
 	Field _final:Int = False
@@ -1224,17 +1458,51 @@ Type TBMXClassNode Extends TBMXNode
 End Type	
 
 
-Type TBMXCallableNode Extends TBMXNode
+Type TBMXCallableNode Extends TBMXBlockNode
 	Field callableType:Int
 	Field _returns:String
-	Field _params:String[]
-	Field _superName:String 'lazy loaded class node
-	Field _super:TBMXNode
+	Field _params:TObjectList = New TObjectList
+	'Field _superName:String 'lazy loaded class node
+	'Field _super:TBMXNode
 	Field _abstract:Int = False
 	Field _final:Int = False
 	
 	Global CALLABLETYPE_FUNCTION:Int = 0
 	Global CALLABLETYPE_METHOD:Int = 1
+	
+	
+	Method AddParam:Int(node:TBMXNode)
+		If Not _params Then _params = New TObjectList
+		
+		_params.AddLast(node)
+		
+		Return True
+	End Method
+
+
+	Method GetParam:TBMXNode(name:String)
+		If Not _params Then Return Null
+		
+		For Local n:TBMXNode = EachIn _params
+			If n.name.ToLower() = name Then Return n
+		Next
+		'TODO: fuzzy search?
+		
+		Return Null
+	End Method
+
+
+	Method HasParam:Int(name:String)
+		Return GetParam(name) <> Null
+	End Method
+
+
+	Method HasParam:Int(node:TBMXNode)
+		If Not _params Then Return False
+		
+		Return _params.Contains(node)
+	End Method
+
 
 	Method ToString:String()
 		Local info:String = "line="+_start.line
@@ -1247,10 +1515,10 @@ Type TBMXCallableNode Extends TBMXNode
 		If _returns Then r = ":" + _returns 
 
 		Local p:String
-		If _params And _params.length > 0
-			For Local param:String = EachIn _params
+		If _params And _params.Count() > 0
+			For Local param:TBMXNode = EachIn _params
 				If p Then p:+ ", "
-				p :+ param
+				p :+ param.name
 			Next
 		EndIf
 		p = "(" + p + ")"
@@ -1270,18 +1538,34 @@ End Type
 Type TBMXPropertyNode Extends TBMXNode
 	Field propertyType:Int
 	Field _typeName:String
-	Field _type:TBMXNode
-	Field _superName:String 'lazy loaded class node
-	Field _super:TBMXNode
+	Field _type:TBMXNode 'cache once retrieved
+	'Field _superName:String 'lazy loaded class node
+	'Field _super:TBMXNode
 	
 	Global PROPERTYTYPE_GLOBAL:Int = 0
 	Global PROPERTYTYPE_LOCAL:Int = 1
 	Global PROPERTYTYPE_FIELD:Int = 2
 	Global PROPERTYTYPE_CONST:Int = 3
+	Global PROPERTYTYPE_PARAM:Int = 4
 
+
+	Method GetTypeName:String()
+		Return _typeName
+	End Method
+	
+	
+	Method GetType:TBMXNode()
+		'lazy resolve
+		If Not _type
+			Throw "Implement me"
+		'	_type = sourceInformation.GetNode(_typeName)
+		EndIf
+		Return _type
+	End Method
+	
 
 	Method ToString:String()
-		Local info:String = "line="+_start.line
+		Local info:String = "line="+_start.line+" linePos="+_start.linePos
 		If _parent Then info :+ " parent="+_parent.name
 		If _parentName And Not _parent Then info :+ " parent="+_parentName
 	
@@ -1301,6 +1585,10 @@ Type TBMXPropertyNode Extends TBMXNode
 				Return "field: "+name + ":" + t +" ["+ info+"]"
 			Case PROPERTYTYPE_CONST
 				Return "const: "+name + ":" + t +" ["+ info+"]"
+			Case PROPERTYTYPE_PARAM
+				Return "param: "+name + ":" + t +" ["+ info+"]"
+			Default
+				Return "unknown property type: "+name + ":" + t +" ["+ info+"]"
 		End Select
 	End Method
 End Type	
