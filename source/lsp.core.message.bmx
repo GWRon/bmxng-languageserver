@@ -116,6 +116,12 @@ endrem
 	End Method
 
 
+	Method GetPathSize:Int(path:String)
+		If not _jsonHelper Then return 0
+		Return _jsonHelper.GetPathSize(path)
+	End Method
+
+
 	Method HasPath:Int(path:String)
 		If not _jsonHelper Then return 0
 		Return _jsonHelper.HasPath(path)

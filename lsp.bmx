@@ -117,7 +117,8 @@ Type TApp
 		jsonHelper.SetPathString("jsonrpc", "2.0")
 		jsonHelper.SetPathInteger("id", 0)
 		'server capabilities
-		jsonHelper.SetPathInteger("result/capabilities/textDocumentSync", 1)
+		'jsonHelper.SetPathInteger("result/capabilities/textDocumentSync", 1) 'send full text
+		jsonHelper.SetPathInteger("result/capabilities/textDocumentSync", 2) 'send incremental changes
 		jsonHelper.SetPathString("result/capabilities/completionProvider/triggerCharacters", ".")
 		
 		'server info

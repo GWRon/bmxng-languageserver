@@ -14,6 +14,9 @@ Type TLSPAppData
 	Field receivedShutdownRequest:Int = False
 	'registered "method" handlers
 	Field methodHandlers:TStringMap = new TStringMap
+
+	Field documents:TStringMap = new TStringMap
+	Field sourcesInformation:TStringMap = new TStringMap
 	
 	'1 = default to "in order" method
 	'0 = default to "not in order" method
