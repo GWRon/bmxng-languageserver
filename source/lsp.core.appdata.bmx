@@ -18,9 +18,6 @@ Type TLSPAppData
 	Field documents:TStringMap = new TStringMap
 	Field sourcesInformation:TStringMap = new TStringMap
 	
-	'1 = default to "in order" method
-	'0 = default to "not in order" method
-	Field defaultMethodOrderHandling:Int = 1
 	'set to true to exit all threads and finish "Run()"
 	Field exitApp:Int = False
 	Field exitCode:Int = 1 '1 = not received "shutdown" yet

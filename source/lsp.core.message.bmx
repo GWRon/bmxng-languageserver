@@ -10,13 +10,15 @@ Type TLSPMessage
 	Field methodNameLower:String
 	Field _cancelled:Int = False
 	Field _customJSON:String
-	
+	Field _jsonInput:String
 	'Field _data:TData
 	Field _jsonHelper:TJSONHelper
 
 
 	Method New(jsonInput:String)
 		_jsonHelper = new TJSONHelper(jsonInput)
+		
+		_jsonInput = jsonInput
 
 		'load "standard" information
 		If _jsonHelper.HasPath("id")

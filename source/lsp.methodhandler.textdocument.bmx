@@ -74,15 +74,8 @@ Type TLSPMethodHandler_TextDocument extends TLSPMethodHandler
 					Local endPos:Int = doc.sourceInformation.GetPosition(endLine, endLinePos)
 
 					doc.ReplaceContent(text, startPos, endPos)
-
-					local newUri:String = doc.uri + ".new.bmx"
-					AddLog("new uri: " + newUri + "~n")
-					If FileType(newUri) = FILETYPE_FILE
-						DeleteFile(newUri)
-					EndIf
-					SaveText(doc.content, newUri)
-
 				Next
+				AddLog("Content Changes ... processed.~n")
 				doc.Parse(fileDir)
 
 				AddLog("Existing file ~q" + fileURI +"~q changed and parsed (version="+doc.contentVersion+").~n")

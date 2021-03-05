@@ -35,7 +35,14 @@ Type TLSPMessageCollection
 	Field outgoingMessages:TObjectList = new TObjectList
 	Field outgoingMessageCount:Int
 	Field outgoingMessagesMutex:TMutex = CreateMutex()
+	
+	'define what "not further defined" methods are assumed to be
+	'1 = default to "in order" method
+	'0 = default to "not in order" method (can run in parallel)
+	Field defaultMethodOrderHandling:Int = 1
 
+	'enable to handle nonsequential methods extra (simultaneously!)
+	Field enabledNonSequentialMethods:Int = False
 
 
 
@@ -50,7 +57,7 @@ Type TLSPMessageCollection
 
 
 	Method IsSequentialMethod:Int(methodName:String)
-		if sequentialMethods.ValueForKey( methodName.ToLower() )
+		if not enabledNonSequentialMethods or sequentialMethods.ValueForKey( methodName.ToLower() )
 			Return True
 		EndIf
 		Return False
@@ -68,7 +75,7 @@ Type TLSPMessageCollection
 
 
 	Method IsNonSequentialMethod:Int(methodName:String)
-		if nonSequentialMethods.ValueForKey( methodName.ToLower() )
+		if enabledNonSequentialMethods and nonSequentialMethods.ValueForKey( methodName.ToLower() )
 			Return True
 		EndIf
 		Return False
@@ -98,13 +105,25 @@ Type TLSPMessageCollection
 	
 	Method AddIncomingMessage:Int(message:TLSPMessage)
 		LockMutex(incomingMessagesMutex)
-		If IsSequentialMethod(message.methodName)
-			incomingSequentialMessages.AddLast(message)
-			incomingSequentialMessageCount :+ 1
-		Else
-			incomingNonSequentialMessages.AddLast(message)
-			incomingNonSequentialMessageCount :+ 1
-		EndIf
+		'default to "in order"
+		if defaultMethodOrderHandling = 1
+			If IsSequentialMethod(message.methodName)
+				incomingSequentialMessages.AddLast(message)
+				incomingSequentialMessageCount :+ 1
+			Else
+				incomingNonSequentialMessages.AddLast(message)
+				incomingNonSequentialMessageCount :+ 1
+			EndIf
+		'default to "not in order" 
+		else
+			If IsNonSequentialMethod(message.methodName)
+				incomingNonSequentialMessages.AddLast(message)
+				incomingNonSequentialMessageCount :+ 1
+			Else
+				incomingSequentialMessages.AddLast(message)
+				incomingSequentialMessageCount :+ 1
+			EndIf
+		endif
 		incomingMessagesByID.Insert(message.id, message)
 		UnlockMutex(incomingMessagesMutex)
 		
@@ -159,6 +178,7 @@ Type TLSPMessageCollection
 	'returns first ("oldest") message
 	Method PopIncomingNonSequentialMessage:TLSPMessage()
 		LockMutex(incomingMessagesMutex)
+
 		Local message:TLSPMessage = TLSPMessage(incomingNonSequentialMessages.RemoveFirst())
 		if message 
 			incomingMessagesByID.Remove(message.id)

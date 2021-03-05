@@ -40,14 +40,16 @@ Global App:TApp = TApp.GetInstance()
 
 'write to log.lsp.txt
 Debugger.logFileEnabled = True
-Debugger.logFileURI = "log.lsp.txt"
+Debugger.logFileURI = "log.lsp."+Millisecs()+".txt"
 
 'ADD HANDLERS
 'add all the method handlers we want to be usable
 AppData.AddMethodHandler( new TLSPMethodHandler_TextDocument )
 AppData.AddMethodHandler( new TLSPMethodHandler_TextDocument_Completion )
 'assume unknown methods are to handle "in order" / as sequence
-AppData.defaultMethodOrderHandling = 1
+MessageCollection.defaultMethodOrderHandling = 1
+'do not allow parallel method handling at all 
+MessageCollection.enabledNonSequentialMethods = False
 
 'DEFINE (NOT IN) ORDERED REQUESTS
 'depending on the default either "in order" or "not in order" register
@@ -270,24 +272,29 @@ Type TApp
 			Local message:TLSPMessage = MessageCollection.PopIncomingSequentialMessage()
 			If not message
 				'we could try to help out with "not in order" messages
-				message:TLSPMessage = MessageCollection.PopIncomingNonSequentialMessage()
+	'			message:TLSPMessage = MessageCollection.PopIncomingNonSequentialMessage()
 
 				'if still no message, wait a bit until next check
-				If not message
+	'			If not message
 					Delay(25)
 					Continue
-				EndIf
+	'			EndIf
 			EndIf
 
+
 			'stop processing if already cancelled
-			if message.IsCancelled() then Continue
-				
+			if message.IsCancelled() 
+				AddLog("!! Skip cancelled message: method=~q" + message.methodName + "~q.~n")
+				Continue
+			endif
+			
 			'stop processing if handler is no longer registered
 			Local handler:TLSPMethodHandler = AppData.GetMethodHandler(message.methodName)
 			if not handler
-				AddLog("!! received no longer handled request: method=~q" + message.methodName + "~q.~n")
-				Continue
+				AddLog("!! received no longer handled request: method=~q" + message.methodName + "~q. json: ~q"+message._jsonInput+"~q~n")
+				continue
 			endif
+
 
 			'actually process this message
 			handler.HandleMessage(message)
@@ -310,6 +317,7 @@ Type TApp
 			'add as much as possible (and also add up to twice as much 
 			'new tasks as we might finish in the threads earlier than
 			'coming back to here)
+rem
 			While MessageCollection.GetIncomingNonSequentialMessageCount() > 0 and workerThreadsPool.threadsWorking < workerThreadsPool.maxThreads * 2
 				local message:TLSPMessage = MessageCollection.PopIncomingNonSequentialMessage()
 				if not message 
@@ -317,23 +325,33 @@ Type TApp
 					AppData.exitApp = True
 					continue
 				EndIf
+endrem
+
+			While workerThreadsPool.threadsWorking < workerThreadsPool.maxThreads * 2
+				local message:TLSPMessage = MessageCollection.PopIncomingNonSequentialMessage()
+				If not message then exit
 
 				'stop processing if already cancelled
-				if message.IsCancelled() then Continue
+				if message.IsCancelled() 
+					AddLog("!! Skip cancelled message: method=~q" + message.methodName + "~q.~n")
+					Continue
+				endif
 				
 				'stop processing if handler is no longer registered
 				Local handler:TLSPMethodHandler = AppData.GetMethodHandler(message.methodName)
 				if not handler
-					AddLog("!! received no longer handled request: method=~q" + message.methodName + "~q.~n")
+					AddLog("!! received no longer handled request: method=~q" + message.methodName + "~q. json: ~q"+message._jsonInput+"~q~n")
 					continue
 				endif
 
 				'add to the "todo list" of the threads
+				AddLog("!! Adding new task to worker pool: method=~q" + message.methodName + "~q.~n")
 				workerThreadsPool.execute( New TLSPMessageHandlerTask(handler, message) )
 			Wend
 
 			Delay(25)
 		Wend
+		AddLog("###### APP EXIT REQUESTED ######~n")
 
 		
 		AddLog("## Waiting for messageReceiverThread to shut down.~n")
@@ -367,6 +385,7 @@ Type TLSPMessageHandlerTask extends TRunnable
 
 	Method run()
 		if handler and message
+			AddLog("!! Task - handle message: method=~q" + message.methodName + "~q.~n")
 			handler.HandleMessage(message)
 		endif
 	End Method
