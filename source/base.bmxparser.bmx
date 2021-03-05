@@ -223,7 +223,7 @@ Type TBMXSourceInformation
 			
 
 			if _linesStartPos.length <> contentLineLengths.length
-				_linesStartPos = New Int[t._lines.length]
+				_linesStartPos = New Int[contentLineLengths.length]
 			endif
 			_linesStartPos[0] = 0
 			If contentLineLengths.length > 0

@@ -61,7 +61,7 @@ Type TLSPMethodHandler_TextDocument extends TLSPMethodHandler
 				'iterate over all content changes
 				'...
 				Local elementCount:Int = message.GetPathSize("params/contentChanges")
-				AddLog("Content Changes: " + elementCount+"~n")
+				'AddLog("Content Changes: " + elementCount+"~n")
 				For local i:int = 0 until elementCount
 					'lines + 1 as VSCode sends "line index", not "line"
 					Local startLine:Int = message.GetPathInteger("params/contentChanges["+i+"]/range/start/line") + 1
@@ -75,10 +75,9 @@ Type TLSPMethodHandler_TextDocument extends TLSPMethodHandler
 
 					doc.ReplaceContent(text, startPos, endPos)
 				Next
-				AddLog("Content Changes ... processed.~n")
 				doc.Parse(fileDir)
 
-				AddLog("Existing file ~q" + fileURI +"~q changed and parsed (version="+doc.contentVersion+").~n")
+				'AddLog("Existing file ~q" + fileURI +"~q changed and parsed (version="+doc.contentVersion+").~n")
 			Else
 				AddLog("To change file ~q" + fileURI + "~q to not found.~n")
 			EndIf
