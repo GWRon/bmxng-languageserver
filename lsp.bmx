@@ -40,7 +40,8 @@ Global App:TApp = TApp.GetInstance()
 
 'write to log.lsp.txt
 Debugger.logFileEnabled = True
-Debugger.logFileURI = "log.lsp."+Millisecs()+".txt"
+'Debugger.logFileURI = "log.lsp."+Millisecs()+".txt"
+Debugger.logFileURI = "log.lsp.txt"
 
 'ADD HANDLERS
 'add all the method handlers we want to be usable
@@ -86,6 +87,8 @@ Type TApp
 	'similar stuff
 	Field workerThreadsPool:TThreadPoolExecutor
 	
+	Global versionText:String = "v0.2"
+	
 	'maximum limit of concurrent worker threads
 	Global _workerThreadsLimit:Int = 4
 
@@ -106,6 +109,7 @@ Type TApp
 		workerThreadsPool = TThreadPoolExecutor.newFixedThreadPool(_workerThreadsLimit)
 
 		AddLog("#### BlitzMax LSP Started!~n")
+		AddLog("###  " + versionText + "~n")
 	End Method
 	
 	
@@ -125,7 +129,7 @@ Type TApp
 		
 		'server info
 		jsonHelper.SetPathString("result/serverInfo/name", "BlitzMax NG Language Server")
-		jsonHelper.SetPathString("result/serverInfo/version", "v0.1")
+		jsonHelper.SetPathString("result/serverInfo/version", versionText)
 		
 		Return New TLSPMessage(jsonHelper)
 	End Method

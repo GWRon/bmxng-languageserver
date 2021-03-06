@@ -372,13 +372,17 @@ Type TBMXSourceInformation
 
 	Method GetNode:TBMXNode(name:String, usedAtPos:Int, usedInNode:TBMXNode = Null)
 		Local result:TBMXNode
-		
+
 		If Not usedInNode Then usedInNode = GetNode(usedAtPos)
+		'Ronny: this also happens for globals/locals in the source file
+		'       (so not in types, functions ...)
 		'defined in other module?
-		If Not usedInNode
-			Print "TODO: defined in another module?"
-			Return Null
-		EndIf
+'		If Not usedInNode
+'			Print "TODO: defined in another module?"
+'			Return Null
+'		EndIf
+		If Not usedInNode then usedInNode = rootNode
+
 		
 		'if "self" is to lookup, we need a class node..
 		Local classNodeRequired:Int = (name.ToLower() = "self")
@@ -386,26 +390,6 @@ Type TBMXSourceInformation
 		'check self and then parents (types, global scope ...)
 		Local checkedNode:TBMXNode = usedInNode
 		Repeat
-Rem
-if name.ToLower() = "info" 
-
-	If TBMXClassNode(checkedNode) 
-		print "  checked class: " + checkedNode.ToString()
-		For local n:TBMXNode = EachIn TBMXClassNode(checkedNode)._children
-			print "  child: " + n.name
-		Next
-		print "  has child:  "+checkedNode.HasChild(name)
-	elseif TBMXCallableNode(checkedNode) 
-		print "  checked callable: " + checkedNode.ToString()
-		For local n:TBMXNode = EachIn TBMXCallableNode(checkedNode)._params
-			print "  param: " + n.name
-		Next
-		print "  has param:  "+TBMXCallableNode(checkedNode).HasParam(name)
-	else
-		print "  checked node: " + checkedNode.ToString()
-	EndIf
-Endif
-endrem
 			'looking up "self" ?
 			if classNodeRequired and not TBMXClassNode(checkedNode)
 				checkedNode = checkedNode._parent
