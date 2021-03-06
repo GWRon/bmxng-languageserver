@@ -7,6 +7,7 @@ Import "base.bmxdocument.bmx"
 Type TLSPMethodHandler_TextDocument extends TLSPMethodHandler
 	Method New() 
 		SetHandledMethods(["textDocument/didOpen", ..
+		                   "textDocument/didSave", ..
 		                   "textDocument/didChange" ..
 		                 ])
 	End Method
@@ -18,24 +19,6 @@ Type TLSPMethodHandler_TextDocument extends TLSPMethodHandler
 			fileURI = message.GetPathString("params/textDocument/uri")
 			fileURI = fileURI.replace("file://", "") 'we only handle local files for now
 
-			'vscode already loads the file and passes the content!
-			rem
-			if FileType(fileURI) = FILETYPE_FILE
-				'parse it
-				Local fileDir:String = ExtractDir(fileURI)
-				'Local fileName:String = StripDir(fileURI)
-				local doc:TBMXDocument = new TBMXDocument
-				doc.LoadFile(fileURI)
-				doc.Parse(fileDir)
-
-				AppData.documents.Insert(fileURI, doc)
-				AppData.sourcesInformation.Insert(fileURI, doc.sourceInformation)
-				AddLog("New file ~q" + fileURI +"~q opened and parsed.~n")
-			Else
-				AddLog("New file ~q" + fileURI + "~q not found.~n")
-			EndIf
-			endrem
-
 			Local fileDir:String = ExtractDir(fileURI)
 			local doc:TBMXDocument = new TBMXDocument
 			doc.uri = fileURI
@@ -46,6 +29,10 @@ Type TLSPMethodHandler_TextDocument extends TLSPMethodHandler
 			AppData.documents.Insert(fileURI, doc)
 			AppData.sourcesInformation.Insert(fileURI, doc.sourceInformation)
 			AddLog("New file ~q" + fileURI +"~q parsed.~n")
+
+		Elseif message.IsMethod("textDocument/didSave")
+			'should some caches need to be refreshed?
+			AddLog("TODO: refresh cache files")
 
 
 		Elseif message.IsMethod("textDocument/didChange")
@@ -79,7 +66,7 @@ Type TLSPMethodHandler_TextDocument extends TLSPMethodHandler
 
 				'AddLog("Existing file ~q" + fileURI +"~q changed and parsed (version="+doc.contentVersion+").~n")
 			Else
-				AddLog("To change file ~q" + fileURI + "~q to not found.~n")
+				AddLog("!! File ~q" + fileURI + "~q for didChange-event was not loaded yet.~n")
 			EndIf
 		EndIf
 	End Method
@@ -122,7 +109,7 @@ Type TLSPMethodHandler_TextDocument_Completion extends TLSPMethodHandler
 
 
 	Method HandleMessage:Int(message:TLSPMessage)
-		AddLog("auto completition stuff requested~n")
+		AddLog("Auto completition stuff requested~n")
 
 		local helper:TJSONHelper = CreateBasicReplyJSONHelper(message.id)
 		Local fileURI:String = message.GetPathString("params/textDocument/uri").Replace("file://", "")
@@ -132,18 +119,18 @@ Type TLSPMethodHandler_TextDocument_Completion extends TLSPMethodHandler
 			'vscode sends "line 2" for "line 3" (offset +1)
 			Local line:Int = Int(message.GetPathInteger("params/position/line")) + 1
 			Local linePos:Int = Int(message.GetPathInteger("params/position/character"))
-AddLog("found parsed doc. line="+line+" linePos="+linePos+"  (RAW: line="+message.GetPathInteger("params/position/line")+"  character="+message.GetPathInteger("params/position/character")+"~n")
 			Local nodes:TBMXNode[] = doc.GetAutoCompleteNodes(line, linePos)
+			Local nodeCount:Int = 0
 			if nodes
-AddLog("found " + nodes.length+" nodes.~n")
+				nodeCount = nodes.length
 				For local i:int = 0 until nodes.length
-AddLog("Adding: " + nodes[i].name +"~n")
 					helper.SetPathString("result/items[" + i + "]/label", nodes[i].name)
 					helper.SetPathInteger("result/items[" + i + "]/kind", GetCompletionItemKind(nodes[i].nodeType))
 				Next
 			endif
+			AddLog("  Found parsed doc. line="+line+" linePos="+linePos+"  (RAW: line="+message.GetPathInteger("params/position/line")+"  character="+message.GetPathInteger("params/position/character")+". Found " + nodes.length +" completion elements.~n")
 		else
-			AddLog("did not find parsed doc~n")
+			AddLog("!! Did not find parsed doc~n")
 		endif
 
 		helper.SetPathBool("result/isIncomplete", false)
