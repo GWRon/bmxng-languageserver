@@ -118,10 +118,10 @@ Type TApp
 	EndFunction
 
 
-	Method CreateInitializeResultMessage:TLSPMessage()
+	Method CreateInitializeResultMessage:TLSPMessage(id:Int)
 		Local jsonHelper:TJSONHelper = New TJSONHelper("")
 		jsonHelper.SetPathString("jsonrpc", "2.0")
-		jsonHelper.SetPathInteger("id", 0)
+		jsonHelper.SetPathInteger("id", id)
 		'server capabilities
 		'jsonHelper.SetPathInteger("result/capabilities/textDocumentSync", 1) 'send full text
 		jsonHelper.SetPathInteger("result/capabilities/textDocumentSync", 2) 'send incremental changes
@@ -161,7 +161,7 @@ Type TApp
 					if message.IsMethod("initialize")
 						AppData.receivedInitializePacket = True
 						AddLog("## INITIALIZE~n")
-						MessageCollection.AddOutgoingMessage( App.CreateInitializeResultMessage() )
+						MessageCollection.AddOutgoingMessage( App.CreateInitializeResultMessage(message.id) )
 						'wait for next message
 						Continue
 	
